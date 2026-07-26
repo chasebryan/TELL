@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Linux / Go 1.26.x
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+          cache: false
+
+      - name: Validate
+        shell: bash
+        run: |
+          test -z "$(gofmt -l .)"
+          go mod tidy
+          go vet ./...
+          CGO_ENABLED=0 go test -count=1 ./...
+          go test -race -count=1 ./...
+          go test -count=3 ./...
+          go list -m all
+          git diff --check
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath -buildvcs=false -ldflags="-buildid=" \
+            -o /tmp/tell-a ./cmd/tell
+
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath -buildvcs=false -ldflags="-buildid=" \
+            -o /tmp/tell-b ./cmd/tell
+
+          cmp /tmp/tell-a /tmp/tell-b
+          /tmp/tell-a version
